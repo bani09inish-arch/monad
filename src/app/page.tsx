@@ -1,47 +1,44 @@
-export default async function Page() {
-  const API_KEY = process.env.GOLDRUSH_API_KEY;
+"use client";
 
-  const chain = "base"; // Monad not live → Base is acceptable for demo
-  const wallet = "0x4200000000000000000000000000000000000006";
+import { useEffect, useState } from "react";
 
-  const res = await fetch(
-    https://api.covalenthq.com/v1/${chain}/address/${wallet}/balances_v2/,
-    {
-      headers: {
-        Authorization: Bearer ${API_KEY},
-      },
-      cache: "no-store",
-    }
-  );
+export default function Page() {
+  const [data, setData] = useState<any>(null);
 
-  const data = await res.json();
-  const items = data?.data?.items || [];
+  useEffect(() => {
+    fetch("/api/portfolio")
+      .then(res => res.json())
+      .then(setData)
+      .catch(console.error);
+  }, []);
 
   return (
-    <main style={{ padding: 32 }}>
-      <h1>MonView – Wallet Intelligence</h1>
+    <main style={{ padding: 24 }}>
+      <h1>MonTrade — Monad Intelligence</h1>
       <p>Powered by GoldRush API</p>
 
-      <h3>Wallet: {wallet}</h3>
+      {!data && <p>Loading real on-chain data…</p>}
 
-      <table border={1} cellPadding={8}>
-        <thead>
-          <tr>
-            <th>Token</th>
-            <th>Balance</th>
-            <th>USD Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((token: any) => (
-            <tr key={token.contract_address}>
-              <td>{token.contract_ticker_symbol}</td>
-              <td>{token.balance}</td>
-              <td>${token.quote?.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {data && (
+        <>
+          <h3>Wallet</h3>
+          <p>{data.wallet}</p>
+
+          <h3>Total USD Value</h3>
+          <p>${data.totalUsd.toFixed(2)}</p>
+
+          <h3>Tokens</h3>
+          <ul>
+            {data.tokens.map((t: any) => (
+              <li key={t.contract_address}>
+                {t.contract_ticker_symbol} — $
+                {t.quote?.toFixed(2) ?? "0.00"}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </main>
   );
 }
+
