@@ -22,11 +22,9 @@ const CHAIN = "eth-mainnet";
 // Put ANY real wallet here to demo balances (this one is just a placeholder)
 const DEMO_WALLET = "0x0000000000000000000000000000000000000000";
 
-function short(addr?: string) {
-  if (!addr) return "-";
-  return ${addr.slice(0, 6)}…${addr.slice(-4)};
+function short(addr: string) {
+  return addr ? ${addr.slice(0, 6)}…${addr.slice(-4)} : "-";
 }
-
 async function grFetch(url: string) {
   const key = process.env.NEXT_PUBLIC_COVALENT_API_KEY;
   if (!key) throw new Error("Missing NEXT_PUBLIC_COVALENT_API_KEY env var");
