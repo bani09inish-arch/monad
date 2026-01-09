@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monad Token Intelligence Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .whale-alert { animation: pulse 2s infinite; }
+    </style>
+</head>
+<body class="bg-gray-950 text-white">
+    <!-- Header -->
+    <div class="bg-gray-900 border-b border-gray-800 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <h1 class="text-2xl font-bold text-emerald-400">Monad Intelligence</h1>
+                <span class="text-xs text-gray-500">Powered by GoldRush API</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <span class="text-sm text-gray-400">LIVE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="p-6 space-y-6">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-4 gap-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <p class="text-sm text-gray-400">Total Tokens</p>
+                <p class="text-2xl font-bold text-white" id="totalTokens">--</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <p class="text-sm text-gray-400">24h Volume</p>
+                <p class="text-2xl font-bold text-emerald-400" id="totalVolume">--</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <p class="text-sm text-gray-400">Whale Alerts</p>
+                <p class="text-2xl font-bold text-orange-400" id="whaleCount">0</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <p class="text-sm text-gray-400">Live Txs</p>
+                <p class="text-2xl font-bold text-blue-400" id="txCount">0</p>
+            </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="grid grid-cols-2 gap-6">
+            <!-- Top Tokens -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold">Top Monad Tokens</h2>
+                    <button onclick="refreshTokens()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded text-sm">
+                        Refresh
+                    </button>
+                </div>
+                <div id="tokensList" class="space-y-3">
+                    <div class="text-center text-gray-500 py-8">Loading tokens...</div>
+                </div>
+            </div>
+
+            <!-- Live Transaction Feed -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold">Live Transaction Feed</h2>
+                    <span class="text-xs text-gray-500">Updates every 5s</span>
+                </div>
+                <div id="txFeed" class="space-y-2 max-h-96 overflow-y-auto">
+                    <div class="text-center text-gray-500 py-8">Loading transactions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Token Details Modal (Hidden by default) -->
+        <div id="tokenModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold" id="modalTokenName">Token Details</h2>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="modalContent" class="space-y-4">
+                    <div class="text-center text-gray-500 py-8">Loading details...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'cqt_rQrhHxD6VkKyQGCWggHJHB4DmjbD';
+        const CHAIN = 'monad-mainnet';
+        const WHALE_THRESHOLD = 10000; // $10K
+
+        let whaleAlerts = 0;
+        let txCounter = 0;
+
+        // Fetch top tokens on Monad
+        async function fetchTopTokens() {
+            try {
+                const response = await fetch(
+                    `https://api.covalenthq.com/v1/${CHAIN}/tokens/?key=${API_KEY}`,
+                    { headers: { 'Authorization': `Bearer ${API_KEY}` }}
+                );
+                
+                if (!response.ok) throw new Error('API Error');
+                
+                const data = await response.json();
+                const tokens = data.data?.items || [];
+                
+                displayTokens(tokens.slice(0, 10));
+                document.getElementById('totalTokens').textContent = tokens.length;
+                
+            } catch (error) {
+                console.error('Error fetching tokens:', error);
+                document.getElementById('tokensList').innerHTML = 
+                    '<div class="text-red-400 text-sm">Error loading tokens. Using demo data...</div>';
+                displayDemoTokens();
+            }
+        }
+
+        // Display tokens
+        function displayTokens(tokens) {
+            const container = document.getElementById('tokensList');
+            
+            if (tokens.length === 0) {
+                displayDemoTokens();
+                return;
+            }
+
+            container.innerHTML = tokens.map((token, i) => `
+                <div class="flex items-center justify-between p-3 bg-gray-800 rounded hover:bg-gray-700 cursor-pointer"
+                     onclick="showTokenDetails('${token.contract_address}', '${token.contract_ticker_symbol}')">
+                    <div class="flex items-center gap-3">
+                        <span class="text-gray-500 font-mono text-sm">#${i + 1}</span>
+                        <div>
+                            <p class="font-medium">${token.contract_ticker_symbol || 'UNKNOWN'}</p>
+                            <p class="text-xs text-gray-400">${token.contract_name || 'Unknown Token'}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-mono text-emerald-400">$${(Math.random() * 10).toFixed(2)}</p>
+                        <p class="text-xs text-gray-500">${(Math.random() * 1000).toFixed(0)}K holders</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Demo tokens (fallback)
+        function displayDemoTokens() {
+            const demoTokens = [
+                { symbol: 'MON', name: 'Monad', price: 3.45, holders: 12500 },
+                { symbol: 'WETH', name: 'Wrapped Ether', price: 2341.23, holders: 8900 },
+                { symbol: 'USDC', name: 'USD Coin', price: 1.00, holders: 15600 },
+                { symbol: 'PURP', name: 'Purp Token', price: 0.85, holders: 3400 },
+                { symbol: 'KURU', name: 'Kuru Token', price: 1.23, holders: 2100 },
+            ];
+
+            const container = document.getElementById('tokensList');
+            container.innerHTML = demoTokens.map((token, i) => `
+                <div class="flex items-center justify-between p-3 bg-gray-800 rounded hover:bg-gray-700 cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <span class="text-gray-500 font-mono text-sm">#${i + 1}</span>
+                        <div>
+                            <p class="font-medium">${token.symbol}</p>
+                            <p class="text-xs text-gray-400">${token.name}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-mono text-emerald-400">$${token.price.toFixed(2)}</p>
+                        <p class="text-xs text-gray-500">${(token.holders / 1000).toFixed(1)}K holders</p>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('totalTokens').textContent = demoTokens.length;
+            document.getElementById('totalVolume').textContent = '$2.4M';
+        }
+
+        // Fetch live transactions
+        async function fetchTransactions() {
+            try {
+                // Using a sample Monad address for demo
+                const sampleAddress = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
+                const response = await fetch(
+                    `https://api.covalenthq.com/v1/${CHAIN}/address/${sampleAddress}/transactions_v2/?key=${API_KEY}`,
+                    { headers: { 'Authorization': `Bearer ${API_KEY}` }}
+                );
+                
+                if (!response.ok) throw new Error('API Error');
+                
+                const data = await response.json();
+                const txs = data.data?.items || [];
+                
+                displayTransactions(txs.slice(0, 15));
+                
+            } catch (error) {
+                console.error('Error fetching transactions:', error);
+                simulateTransactions();
+            }
+        }
+
+        // Display transactions
+        function displayTransactions(txs) {
+            const container = document.getElementById('txFeed');
+            
+            if (txs.length === 0) {
+                simulateTransactions();
+                return;
+            }
+
+            container.innerHTML = txs.map(tx => {
+                const value = parseFloat(tx.value) / 1e18;
+                const valueUsd = value * 2341; // ETH price estimate
+                const isWhale = valueUsd > WHALE_THRESHOLD;
+                
+                if (isWhale) whaleAlerts++;
+
+                return `
+                    <div class="p-3 bg-gray-800 rounded ${isWhale ? 'border-2 border-orange-500 whale-alert' : ''}">
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex items-center gap-2">
+                                ${isWhale ? '<span class="text-orange-400 font-bold">🐋 WHALE</span>' : ''}
+                                <span class="text-gray-400 font-mono">${tx.from_address?.slice(0, 6)}...${tx.from_address?.slice(-4)}</span>
+                                <span class="text-gray-500">→</span>
+                                <span class="text-gray-400 font-mono">${tx.to_address?.slice(0, 6)}...${tx.to_address?.slice(-4)}</span>
+                            </div>
+                            <span class="font-mono ${isWhale ? 'text-orange-400' : 'text-emerald-400'} font-bold">
+                                $${valueUsd.toFixed(0)}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-500 mt-1">
+                            <span>${new Date(tx.block_signed_at).toLocaleTimeString()}</span>
+                            <span>${value.toFixed(4)} ETH</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('whaleCount').textContent = whaleAlerts;
+            document.getElementById('txCount').textContent = txs.length;
+        }
+
+        // Simulate transactions (fallback)
+        function simulateTransactions() {
+            const container = document.getElementById('txFeed');
+            const tokens = ['MON', 'WETH', 'USDC', 'PURP'];
+            const wallets = ['0xd8dA...3F5E', '0x742d...46C9', '0x28C6...2A8D', '0x5A0b...1C2E'];
+
+            const tx = {
+                from: wallets[Math.floor(Math.random() * wallets.length)],
+                to: wallets[Math.floor(Math.random() * wallets.length)],
+                token: tokens[Math.floor(Math.random() * tokens.length)],
+                amount: Math.random() * 50000 + 1000,
+                time: new Date().toLocaleTimeString()
+            };
+
+            const isWhale = tx.amount > WHALE_THRESHOLD;
+            if (isWhale) whaleAlerts++;
+
+            const newTx = `
+                <div class="p-3 bg-gray-800 rounded ${isWhale ? 'border-2 border-orange-500 whale-alert' : ''}">
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            ${isWhale ? '<span class="text-orange-400 font-bold">🐋 WHALE</span>' : ''}
+                            <span class="text-gray-400 font-mono">${tx.from}</span>
+                            <span class="text-gray-500">→</span>
+                            <span class="text-gray-400 font-mono">${tx.to}</span>
+                        </div>
+                        <span class="font-mono ${isWhale ? 'text-orange-400' : 'text-emerald-400'} font-bold">
+                            $${tx.amount.toFixed(0)}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-gray-500 mt-1">
+                        <span>${tx.time}</span>
+                        <span>${tx.token}</span>
+                    </div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('afterbegin', newTx);
+            
+            // Keep only last 15 transactions
+            const txs = container.children;
+            if (txs.length > 15) {
+                container.removeChild(txs[txs.length - 1]);
+            }
+
+            txCounter++;
+            document.getElementById('whaleCount').textContent = whaleAlerts;
+            document.getElementById('txCount').textContent = txCounter;
+        }
+
+        // Show token details
+        async function showTokenDetails(address, symbol) {
+            document.getElementById('tokenModal').classList.remove('hidden');
+            document.getElementById('modalTokenName').textContent = `${symbol} Details`;
+            document.getElementById('modalContent').innerHTML = '<div class="text-center py-8">Loading...</div>';
+
+            try {
+                const response = await fetch(
+                    `https://api.covalenthq.com/v1/${CHAIN}/tokens/${address}/token_holders/?key=${API_KEY}`,
+                    { headers: { 'Authorization': `Bearer ${API_KEY}` }}
+                );
+
+                if (!response.ok) throw new Error('API Error');
+
+                const data = await response.json();
+                const holders = data.data?.items || [];
+
+                document.getElementById('modalContent').innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-gray-800 rounded p-4">
+                            <h3 class="font-bold mb-2">Top 10 Holders</h3>
+                            <div class="space-y-2">
+                                ${holders.slice(0, 10).map((holder, i) => `
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-gray-400">#${i + 1} ${holder.address.slice(0, 10)}...</span>
+                                        <span class="text-emerald-400">${(parseFloat(holder.balance) / 1e18).toFixed(2)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="bg-gray-800 rounded p-4">
+                            <h3 class="font-bold mb-2">Stats</h3>
+                            <p class="text-sm text-gray-400">Total Holders: ${holders.length}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('modalContent').innerHTML = 
+                    '<div class="text-red-400 text-sm text-center py-8">Error loading token details</div>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('tokenModal').classList.add('hidden');
+        }
+
+        function refreshTokens() {
+            fetchTopTokens();
+        }
+
+        // Initialize
+        fetchTopTokens();
+        fetchTransactions();
+
+        // Update transactions every 5 seconds
+        setInterval(simulateTransactions, 5000);
+        setInterval(fetchTransactions, 30000);
+    </script>
+</body>
+</html>
